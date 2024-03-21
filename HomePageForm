@@ -1,0 +1,177 @@
+using static f2.Authenticator;
+using f2;
+using Microsoft.Data.SqlClient;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+using System.Data;
+using System.Diagnostics.Metrics;
+
+namespace f2
+{
+    public partial class HomePage : Form
+    {
+        private User authenticatedUser;
+
+        public HomePage(User user)
+        {
+            InitializeComponent();
+            authenticatedUser = user;
+
+            welcomeLabel.Text = $"Welcome, {authenticatedUser.Username}!";
+
+        }
+
+        SqlConnection sqlCon = new SqlConnection(@"Data Source=LAB109PC10\SQLEXPRESS; Initial Catalog=RealEstate; Integrated Security=True; Encrypt=False;");
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+
+            sqlCon.Open(); // Open SQL connection
+
+            // Start with a base SQL query
+            string query = "SELECT * FROM Property WHERE 1 = 1";
+            // Create a list to store the conditions for filtering
+            List<string> conditions = new List<string>();
+
+            // Check each ComboBox and add a condition if an item is selected
+            if (type.SelectedItem != null)
+            {
+                conditions.Add("Type = @Type");
+            }
+
+            if (location.SelectedItem != null)
+            {
+                conditions.Add("city = @Location");
+            }
+
+            if (price.SelectedItem != null)
+            {
+                conditions.Add("priceRange = @Price");
+            }
+
+            if (status.SelectedItem != null)
+            {
+                conditions.Add("Status = @Status");
+            }
+
+            // Combine the conditions into the SQL query
+            if (conditions.Count > 0)
+            {
+                query += " AND " + string.Join(" AND ", conditions);
+            }
+
+            SqlCommand cmd = new SqlCommand(query, sqlCon);
+
+            // Set parameters based on selected values, handling the case where ComboBox is empty
+            if (type.SelectedItem != null)
+            {
+                cmd.Parameters.AddWithValue("@Type", type.SelectedItem.ToString());
+            }
+
+            if (location.SelectedItem != null)
+            {
+                cmd.Parameters.AddWithValue("@Location", location.SelectedItem.ToString());
+            }
+
+            if (price.SelectedItem != null)
+            {
+                cmd.Parameters.AddWithValue("@Price", price.SelectedItem.ToString());
+            }
+
+            if (status.SelectedItem != null)
+            {
+                cmd.Parameters.AddWithValue("@Status", status.SelectedItem.ToString());
+            }
+
+            using (SqlDataAdapter adapter = new SqlDataAdapter(cmd))
+            {
+                DataSet ds = new DataSet();
+                adapter.Fill(ds);
+                dataGridView1.DataSource = ds.Tables.Count > 0 ? ds.Tables[0] : null;
+            }
+
+            sqlCon.Close();
+
+        }
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+
+            sqlCon.Open(); // Open SQL connection
+
+            // Check if the room is available
+            string availabilityQuery = "SELECT status FROM Property WHERE propertyID = @ID";
+
+            SqlCommand availabilityCmd = new SqlCommand(availabilityQuery, sqlCon);
+            availabilityCmd.Parameters.AddWithValue("@ID", usBox.Text);
+            string availabilityResult = availabilityCmd.ExecuteScalar().ToString().Trim();
+
+            if (availabilityResult.Equals("Available", StringComparison.OrdinalIgnoreCase))
+            {
+                // Room is available, proceed with booking
+                string insertQuery = "INSERT INTO Reservation VALUES (@clientID, @propertyID)";
+                SqlCommand insertCmd = new SqlCommand(insertQuery, sqlCon);
+
+                // Set parameters based on selected values
+                insertCmd.Parameters.AddWithValue("@clientID", authenticatedUser.ID);
+                insertCmd.Parameters.AddWithValue("@propertyID", usBox.Text);
+                insertCmd.ExecuteNonQuery();
+
+                // Update room availability status
+                string updateAvailabilityQuery = "UPDATE Property SET status = 'Reserved' WHERE propertyID = @ID";
+                SqlCommand updateAvailabilityCmd = new SqlCommand(updateAvailabilityQuery, sqlCon);
+                updateAvailabilityCmd.Parameters.AddWithValue("@ID", usBox.Text);
+                updateAvailabilityCmd.ExecuteNonQuery();
+
+                MessageBox.Show("Booking Successful!");
+            }
+            else
+            {
+                // Room is not available
+                MessageBox.Show("Sorry, this is not available for booking.");
+            }
+
+            sqlCon.Close();
+
+        }
+
+        private void usBox_Click(object sender, EventArgs e)
+        {
+            if (usBox.Text == "Enter ID to reserve")
+            {
+                usBox.Text = "";
+                usBox.ForeColor = Color.Black;
+            }
+        }
+
+        private void usBox_Validating(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            if (usBox.Text == string.Empty)
+            {
+                usBox.Text = "Enter ID to reserve";
+                usBox.ForeColor = Color.Gray;
+            }
+        }
+
+        private void type_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            button1_Click(sender, e);
+        }
+
+        private void location_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            button1_Click(sender, e);
+
+        }
+
+        private void price_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            button1_Click(sender, e);
+
+        }
+
+        private void status_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            button1_Click(sender, e);
+        }
+    }
+}
